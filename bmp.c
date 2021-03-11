@@ -52,14 +52,54 @@ IMAGE *read_Image(FILE *fp,BMPINFOHEADER *info){
     picture->rgb = read_rgb(fp,picture->info->width,picture->info->height,picture->info->bpp);
     if(!picture->rgb){
         free(image);
-        return NULL
+        return NULL;
     }
 
     return picture;
 
 }
 
+void rgb_convert(IMAGE *picture){
+    int bytespp = picture->info->bpp / 8;
+    for(uint32_t i = 0; i< picture->info->width * picture->info->height * bytespp ; i++){
+        picture->rgb[i] = ~picture->rgb[i];
+    }
+}
 
+void palette_convert(IMAGE *picture){
+    for(uint32_t i = 0; i < picture->info->color_used * 4; i++ ){
+        if((i+1 )%4 == 0){
+            picture->info->palette[i] = ~picture->info->palette[i];
+        }
+    }
+}
+int create_BMPImage(BMPFILEHEADER *header,BMPINFOHEADER *info,IMAGE *picture,char *output){
+    FILE *fp = fopen(output,"wb");
+    fwrite(&header,sizeof(BMPFILEHEADER),1,fp);
+    fwrite(&info,sizeof(BMPINFOHEADER),1,fp);
+
+    if ( picture->info->bpp == 8) {
+        for (uint32_t i = 0; i < picture->info->color_used * 4; i++) {
+            fwrite(&picture->palette[i], 1, 1, fp);
+        }
+    }
+    for (uint32_t i = 0;
+         i < picture->info->width * picture->info->height * picture->info->bpp / 8; i++) {
+        fwrite(&picture->rgb[i], 1, 1, fp);
+    }
+
+    fclose(fp);
+
+}
+
+void free_Image(IMAGE *picture, BMPFILEHEADER *header, BMPINFOHEADER *info){
+    free(picture->info);
+    free(picture->palette);
+    free(picture->rgb);
+    free(picture);
+    free(info);
+    free(header);
+}
 
 int BMP_openfile(char* input_name, char* output_name){
     FILE *fp = fopen(input_name,"rb");
@@ -107,11 +147,3 @@ int BMP_openfile(char* input_name, char* output_name){
 
 }
 
-void free_Image(IMAGE *picture, BMPFILEHEADER *header, BMPINFOHEADER *info){
-    free(picture->info);
-    free(picture->palette);
-    free(picture->rgb);
-    free(picture);
-    free(info);
-    free(header);
-}
