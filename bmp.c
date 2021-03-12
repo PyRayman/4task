@@ -16,8 +16,8 @@ uint8_t *read_rgb(FILE *fp, uint32_t width, uint32_t height, uint16_t bpp){
 }
 
 uint8_t *read_palette(FILE *fp, uint32_t colors){
-    uint8_t table_size = colors * 4;// colors_used * bytes of color table
-    uint8_t *palette = malloc(sizeof(uint16_t) * table_size);
+    uint16_t table_size = colors * 4;// colors_used * bytes of color table
+    uint8_t *palette = malloc(sizeof(int) * table_size);
     if(!palette){
         fprintf(stdout, "Cannot allocate memory for results string in all experiment\n");
         return 0;
@@ -32,7 +32,7 @@ uint8_t *read_palette(FILE *fp, uint32_t colors){
 
 
 IMAGE *read_Image(FILE *fp,BMPINFOHEADER *info){
-    IMAGE picture = calloc(1,sizeof(IMAGE));
+    IMAGE *picture = calloc(1,sizeof(IMAGE));
     if (!picture) {
         fprintf(stdout, "Cannot allocate memory for results string in all experiment\n");
         return NULL;
@@ -40,6 +40,10 @@ IMAGE *read_Image(FILE *fp,BMPINFOHEADER *info){
 
 
     picture->info = info;
+    if(!picture->info){
+        free(picture);
+        return NULL;
+    }
 
     if (picture->info->bpp == 8) {
         picture->palette = read_palette(fp, picture->info->color_used);
@@ -51,7 +55,7 @@ IMAGE *read_Image(FILE *fp,BMPINFOHEADER *info){
 
     picture->rgb = read_rgb(fp,picture->info->width,picture->info->height,picture->info->bpp);
     if(!picture->rgb){
-        free(image);
+        free(picture);
         return NULL;
     }
 
@@ -68,15 +72,16 @@ void rgb_convert(IMAGE *picture){
 
 void palette_convert(IMAGE *picture){
     for(uint32_t i = 0; i < picture->info->color_used * 4; i++ ){
-        if((i+1 )%4 == 0){
-            picture->info->palette[i] = ~picture->info->palette[i];
+        if ((i + 1) % 4 != 0) {
+            picture->palette[i] = ~picture->palette[i];
         }
     }
 }
-int create_BMPImage(BMPFILEHEADER *header,BMPINFOHEADER *info,IMAGE *picture,char *output){
+
+void create_BMPImage(BMPFILEHEADER *header,BMPINFOHEADER *info, IMAGE *picture,char *output){
     FILE *fp = fopen(output,"wb");
-    fwrite(&header,sizeof(BMPFILEHEADER),1,fp);
-    fwrite(&info,sizeof(BMPINFOHEADER),1,fp);
+    fwrite(header,sizeof(BMPFILEHEADER),1,fp);
+    fwrite(info,sizeof(BMPINFOHEADER),1,fp);
 
     if ( picture->info->bpp == 8) {
         for (uint32_t i = 0; i < picture->info->color_used * 4; i++) {
@@ -101,15 +106,20 @@ void free_Image(IMAGE *picture, BMPFILEHEADER *header, BMPINFOHEADER *info){
     free(header);
 }
 
-int BMP_openfile(char* input_name, char* output_name){
+int mine_realisation(char* input_name, char* output_name){
+    
     FILE *fp = fopen(input_name,"rb");
-    BMPINFOHEADER *info;
-    BMPFILEHEADER *header;
-    header = malloc(sizeof(BMPFILEHEADER));
-    info = malloc(sizeof(BMPINFOHEADER));
+    if (fp == NULL) {
+        fprintf(stdout, "Cannot open file. No file with name %s exists.\n", input_name);
+        return -1;
+    }
+    
+    BMPINFOHEADER *info = malloc(sizeof(BMPINFOHEADER));
+    BMPFILEHEADER *header  = malloc(sizeof(BMPFILEHEADER));
+    
     fread(header,sizeof(BMPFILEHEADER),1,fp); 
     fread(info,sizeof(BMPINFOHEADER),1,fp);
-
+    
     if (header->file_type != 19778){
         fprintf(stdout,"Error format. The converter only supports BMP format.");
         fclose(fp);
@@ -130,20 +140,24 @@ int BMP_openfile(char* input_name, char* output_name){
         fclose(fp);
         return -2;
     }
+ 
 
-    struct Image *picture = read_Image(fp,info);
+    IMAGE *picture = read_Image(fp,info);
     if(!picture){
         fclose(fp);
         return -1;
     }
-    
-    
-    fclose(fp);
-    
-    create_BMP_Image(header,info,picture);
-    free_Image(picture);
-    return 0;
-}
 
+    if ( info->bpp == 8){
+        palette_convert(picture);
+    }
+    else{
+        rgb_convert(picture);
+    }
+
+    create_BMPImage(header,info,picture,output_name);
+    free_Image(picture,header,info);
+    fclose(fp);
+    return 0;
 }
 
